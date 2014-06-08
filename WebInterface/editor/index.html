@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>nuclei: atomic level editor</title>
+
+<script type="x-shader/x-vertex" id="vs_entities"> 
+attribute vec3 ia_position;
+uniform mat4 u_proj;
+uniform mat4 u_trans;
+uniform vec3 u_size;
+void main()
+{
+    gl_Position = u_proj * (u_trans* vec4(ia_position*u_size, 1.0));
+}
+</script>
+<script type="x-shader/x-fragment" id="ps_entities">
+precision mediump float;
+uniform vec4 u_color;
+void main()
+{
+    gl_FragColor = u_color;
+}
+</script>
+
+<script type="x-shader/x-vertex" id="vs_particles"> 
+attribute vec2 ia_position;
+uniform mat4 u_proj;
+uniform float u_pointSize;
+void main()
+{
+    gl_PointSize = u_pointSize;
+    gl_Position = u_proj * vec4(ia_position, 0.0, 1.0);
+}
+</script>
+<script type="x-shader/x-fragment" id="ps_particles">
+precision mediump float;
+uniform vec4 u_color;
+void main()
+{
+    gl_FragColor = u_color;
+}
+</script>
+
+<script type="x-shader/x-vertex" id="vs_points"> 
+attribute vec2 ia_position;
+attribute vec4 ia_color;
+uniform mat4 u_proj;
+uniform float u_pointSize;
+varying vec4 vs_color;
+void main()
+{
+    vs_color = ia_color;
+    gl_PointSize = u_pointSize;
+    gl_Position = u_proj * vec4(ia_position, 0.0, 1.0);
+}
+</script>
+<script type="x-shader/x-fragment" id="ps_points">
+precision mediump float;
+varying vec4 vs_color;
+void main()
+{
+    gl_FragColor = vs_color;
+}
+</script>
+
+<script type="x-shader/x-vertex" id="vs_lasers"> 
+attribute vec3 ia_position;
+uniform mat4 u_proj;
+uniform vec4 u_color;
+varying vec4 vs_color;
+void main()
+{
+    vs_color = vec4(u_color.rgb, u_color.a*ia_position.z);
+    gl_Position = u_proj * vec4(ia_position.xy, 0.0, 1.0);
+}
+</script>
+<script type="x-shader/x-fragment" id="ps_lasers">
+precision mediump float;
+varying vec4 vs_color;
+void main()
+{
+    gl_FragColor = vs_color;
+}
+</script>
+
+<script type="text/javascript" src="prototype.js"></script>
+<script type="text/javascript" src="gl-matrix-min.js"></script>
+<script type="text/javascript" src="draw.js"></script>
+<script type="text/javascript" src="util.js"></script>
+<script type="text/javascript">
+
+var EditMode = {
+    Entity : 0,
+    Curve : 1,
+    PickEntity : 2,
+};
+var Button = {
+    Left    : 0,
+    Middle  : 1,
+    Right   : 2,
+};
+var FieldX = 2.56;
+var FieldY = 2.56;
+
+var gl;
+var ext;
+
+var FPSTimer;
+var EntitiesTimer;
+var loading = false
+var frame = 0;
+var delay = 1000/30;
+var starttime = new Date().getTime();
+
+var mouse = {
+    screen:     vec2.create(),
+    screen_prev:vec2.create(),
+    pos:        vec2.create(),
+    pos_prev:   vec2.create(),
+    drag_begin: vec2.create(),
+    dragging:   false,
+    button:     0,
+};
+
+var camera = {
+    pos:    vec3.fromValues(0.0, 0.0, 3.0),
+    target: vec3.fromValues(0.0, 0.0, 0.0),
+    up:     vec3.fromValues(0.0, 1.0, 0.0),
+    aspect: 1.0,
+    left:   -FieldX,
+    right:   FieldX,
+    bottom: -FieldX,
+    top:     FieldX,
+    znear:  0.1,
+    zfar:   1000.0,
+
+    view: mat4.create(),
+    proj: mat4.create(),
+    viewProj: mat4.create(),
+
+    updateMatrix: function() {
+        mat4.lookAt(this.view, this.pos, this.target, this.up);
+        mat4.ortho(this.proj, this.left, this.right, this.bottom, this.top, this.znear, this.zfar);
+        mat4.mul(this.viewProj, this.proj, this.view);
+    }
+};
+
+var editor = {
+    editMode: EditMode.Entity,
+    entityTypes: [],
+    entityTypes_IDOrder: {},
+    functions: [],
+    resource: 0.0,
+
+    entitySelection: [],
+    entityDeployType: 0,
+
+    curve: {
+        x: curve.createPoints(),
+        y: curve.createPoints(),
+    },
+    curveSelection: [-1,-1],
+    curveBzSelection: 1,
+
+    onMouseMove: function() {
+        if(this.editMode==EditMode.Entity) {
+            if(mouse.dragging && editor.entitySelection.length>0) {
+                if(mouse.button==Button.Left) {
+                    var diff = vec2.create();
+                    vec2.sub(diff, mouse.pos, mouse.pos_prev);
+                    editor.entitySelection.each(function(h){
+                        callRequest(h,"move",vec2_s(diff));
+                    });
+                }
+                else if(mouse.button==Button.Right) {
+                    var diff = vec2.create();
+                    vec2.sub(diff, mouse.pos, mouse.drag_begin);
+                    editor.entitySelection.each(function(h){
+                        callRequest(h,"orient",vec2_s(diff));
+                    });
+                }
+            }
+        }
+        else if(this.editMode==EditMode.Curve) {
+            if(mouse.dragging && mouse.button==Button.Left) {
+                var diff = vec2.create();
+                vec2.sub(diff, mouse.pos, mouse.pos_prev);
+                var bsel = editor.curveBzSelection;
+                var sel = editor.curveSelection;
+                if(sel[0]!=-1) {
+                    editor.curve.x[sel[0]][bsel] += diff[0];
+                }
+                if(sel[1]!=-1) {
+                    editor.curve.y[sel[1]][bsel] += diff[1];
+                }
+                ui.updateCurvePoints();
+            }
+        }
+    },
+
+    onMouseDown: function() {
+        if(this.editMode==EditMode.Entity) {
+            if(mouse.button==Button.Left) {
+                editor.clearEntitySelection();
+                var selection = editor.selectEntity(mouse.pos);
+                if(selection!=0) {
+                    editor.addEntitySelection(selection);
+                }
+            }
+        }
+        else if(this.editMode==EditMode.Curve) {
+            var cur = editor.curveSelection;
+            var s = cur;
+            var bz = 1;
+            if(s[0]!=-1 || s[1]!=-1) {
+                bz = editor.selectBzCurvePoint(mouse.pos);
+                if(bz==1) {
+                    s = [-1,-1];
+                }
+            }
+            if(s[0]==-1 || s[1]==-1) {
+                s = editor.selectCurvePoint(mouse.pos);
+            }
+
+            var needsUpdate = false;
+            if(mouse.button==Button.Left) {
+                if(cur[0]==-1 && cur[1]==-1 && s[0]==-1 && s[1]==-1) {
+                    editor.curve.x.addPoint(curve.createPoint(editor.curve.x.endTime()+300.0, mouse.pos[0], -0.1, 0.1, curve.Bezier));
+                    editor.curve.y.addPoint(curve.createPoint(editor.curve.y.endTime()+300.0, mouse.pos[1], -0.0, 0.0, curve.Bezier));
+                    needsUpdate=true;
+                }
+                else {
+                    editor.curveSelection = s;
+                    editor.curveBzSelection = bz;
+                    needsUpdate=true;
+                }
+            }
+            else if(mouse.button==Button.Right) {
+                if(s[0]!=-1) { editor.curve.x.splice(s[0],1); needsUpdate=true; }
+                if(s[1]!=-1) { editor.curve.y.splice(s[1],1); needsUpdate=true; }
+                editor.curveSelection = [-1,-1];
+            }
+            else if(mouse.button==Button.Middle) {
+                if(s[0]!=-1) { editor.curve.x[s[0]][4] = (editor.curve.x[s[0]][4]+1)%curve.End; needsUpdate=true; }
+                if(s[1]!=-1) { editor.curve.y[s[1]][4] = (editor.curve.y[s[1]][4]+1)%curve.End; needsUpdate=true; }
+            }
+            if(needsUpdate) { ui.updateCurvePoints(); }
+        }
+    },
+
+    onMouseUp: function() {
+        if(this.editMode==EditMode.Entity) {
+            if(mouse.button==Button.Left) {
+                if(editor.entitySelection.length==0) {
+                    postCommand("/nuclei/create", "classid="+editor.entityDeployType+",pos="+vec2_s(mouse.pos));
+                }
+            }
+            else if(mouse.button==Button.Right) {
+                var selection = editor.selectEntity(mouse.pos);
+                editor.entitySelection.each(function(h){
+                    callRequest(h,"instruct",instruction_s(mouse.pos,selection));
+                });
+            }
+            else if(mouse.button==Button.Middle) {
+                var selection = editor.selectEntity(mouse.pos);
+                editor.entitySelection.each(function(h){
+                    callRequest(h,"setParent",uint32_s(selection));
+                });
+            }
+        }
+        else if(this.editMode==EditMode.Curve) {
+        }
+    },
+
+    clearEntitySelection: function() {
+        this.entitySelection.clear();
+    },
+    addEntitySelection: function(e) {
+        this.entitySelection.push(e);
+        if(this.entitySelection.length==1) {
+            ui.updateEntityProperties(e);
+        }
+    },
+    setEntitySelection: function(e) {
+        this.clearEntitySelection();
+        this.entitySelection.push(e);
+        if(this.entitySelection.length==1) {
+            ui.updateEntityProperties(e);
+        }
+    },
+
+    selectEntity: function(p)
+    {
+        var nearest = 0.0;
+        var handle = 0;
+        var diff = vec2.create();
+        for(var i=0; i<entities.ids.length; ++i) {
+            var ipp = i+1;
+            var pos = entities.trans.subarray(16*i+12, 16*ipp);
+            var size = entities.size.subarray(3*i, 3*ipp);
+            vec2.sub(diff, p, pos);
+            var radius = vec2.length(size);
+            var len = vec2.length(diff);
+            if(len<radius) {
+                if(handle==0 || len<nearest) {
+                    nearest = len;
+                    handle = entities.ids[i];
+                }
+            }
+        }
+        return handle;
+    },
+    selectEntityByRect: function(bl, ur)
+    {
+        var handles = [];
+        for(var i=0; i<entities.ids.length; ++i) {
+            var ipp = i+1;
+            var pos = entities.trans.subarray(16*i+12, 16*ipp);
+            var size = entities.size.subarray(3*i, 3*ipp);
+            var radius = vec2.length(size);
+            if( (pos[0]-radius>=bl[0] && pos[0]+radius<=ur[0]) &&
+                (pos[1]-radius>=bl[1] && pos[1]+radius<=ur[1]) )
+            {
+                handles.push(entities.ids[i]);
+            }
+        }
+        handles.sort();
+        return handles;
+    },
+
+    getEntityClassID: function(e) {
+        return (e & 0xFFF00000) >>> 20;
+    },
+    getEntityClassName: function(e) {
+        var classid = this.getEntityClassID(e);
+        var typeinfo = this.entityTypes_IDOrder[classid];
+        return typeinfo;
+    },
+
+    selectCurvePoint: function(p)
+    {
+        var xi = -1;
+        var yi = -1;
+        var nearest = 0.0;
+
+        var radius = 0.1;
+        var xline = editor.curve.x;
+        var yline = editor.curve.y;
+        var diff = vec2.create();
+        for(var i=0; i<xline.length; ++i) {
+            var ipp = i+1;
+            var pos = vec2.fromValues(xline[i][1], yline.computeValue(xline[i][0]));
+            vec2.sub(diff, p, pos);
+            var len = vec2.length(diff);
+            if(len<radius) {
+                if(xi==-1 || len<nearest) {
+                    nearest = len;
+                    xi = i;
+                }
+            }
+        }
+        for(var i=0; i<yline.length; ++i) {
+            var ipp = i+1;
+            var pos = vec2.fromValues(xline.computeValue(yline[i][0]), yline[i][1]);
+            vec2.sub(diff, p, pos);
+            var len = vec2.length(diff);
+            if(len<radius) {
+                if(yi==-1 || len<nearest) {
+                    nearest = len;
+                    yi = i;
+                }
+            }
+        }
+        return [xi,yi];
+    },
+    selectBzCurvePoint: function(p)
+    {
+        var radius = 0.05;
+        var xline = editor.curve.x;
+        var yline = editor.curve.y;
+        var diff = vec2.create();
+        var sx = editor.curveSelection[0];
+        var sy = editor.curveSelection[1];
+        var r = 1;
+        if(sx>-1 && sy>-1 && xline[sx][4]==curve.Bezier && yline[sy][4]==curve.Bezier) {
+            var pos = [
+                vec2.fromValues(xline[sx][1]+xline[sx][2], yline[sy][1]+yline[sy][2]),
+                vec2.fromValues(xline[sx][1]+xline[sx][3], yline[sy][1]+yline[sy][3]),
+            ];
+            for(var i=0; i<pos.length; ++i) {
+                vec2.sub(diff, p, pos[i]);
+                var len = vec2.length(diff);
+                if(len<radius) {
+                    r = i+2;
+                }
+            }
+        }
+        return r;
+    },
+    sendCurve1D: function(entity,clear,add)
+    {
+        var cmd = [];
+        cmd.push(makeCallCommand(entity,clear,""));
+        editor.curve.x.each(function(p){
+            cmd.push(makeCallCommand(entity,add,curvepoint_s(p)));
+        });
+        postCommand("/nuclei/call",cmd.join(";"));
+    },
+    sendCurve2D: function(entity,clear,add)
+    {
+        var cmd = [];
+        clear.each(function(c){
+            cmd.push(makeCallCommand(entity,c,""));
+        })
+        editor.curve.x.each(function(p){
+            cmd.push(makeCallCommand(entity,add[0],curvepoint_s(p)));
+        });
+        editor.curve.y.each(function(p){
+            cmd.push(makeCallCommand(entity,add[1],curvepoint_s(p)));
+        });
+        postCommand("/nuclei/call",cmd.join(";"));
+    },
+
+    setupConsts: function(consts)
+    {
+        this.entityTypes = consts.entityTypes;
+        this.functions = consts.functions;
+        for(var name in this.entityTypes) {
+            var value = this.entityTypes[name];
+            this.entityTypes_IDOrder[value.id] = name;
+        }
+    },
+};
+
+var entities = {
+    ids:    new Uint32Array(),
+    trans:  new Float32Array(),
+    size:   new Float32Array(),
+    color:  new Float32Array(),
+
+    bullets: new Float32Array(),
+    lasers: new Float32Array(),
+    fluids: new Float32Array(),
+};
+
+var ui = {
+    getProperties: function() { return $("entity_property_list"); },
+    getTypeSelector: function() { return $("entity_type_list"); },
+
+    createPropertyInput: function(entity, property) {
+        if(property.type=="curve1D") {
+            var span = document.createElement("span");
+            span.entity = entity;
+            span.eprop = property;
+            var edit = document.createElement("input");
+            edit.setAttribute("type", "button");
+            edit.value = "edit";
+            edit.onclick = function() {
+                property.value.each(function(e){ editor.curve.x.addPoint(e); });
+                ui.beginCurveEdit();
+            }
+            var send = document.createElement("input");
+            send.setAttribute("type", "button");
+            send.value = "done";
+            send.onclick = function() {
+                editor.sendCurve1D(entity,property.clear, property.add);
+                ui.endCurveEdit();
+            }
+            span.appendChild(edit);
+            span.appendChild(send);
+            return span;
+        }
+        else if(property.type=="curve2D") {
+            var span = document.createElement("span");
+            span.entity = entity;
+            span.eprop = property;
+            var edit = document.createElement("input");
+            edit.setAttribute("type", "button");
+            edit.value = "edit";
+            edit.onclick = function() {
+                property.value.x.each(function(e){ editor.curve.x.addPoint(e); });
+                property.value.y.each(function(e){ editor.curve.y.addPoint(e); });
+                ui.beginCurveEdit();
+            }
+            var send = document.createElement("input");
+            send.setAttribute("type", "button");
+            send.value = "done";
+            send.onclick = function() {
+                editor.sendCurve2D(entity,property.clear, property.add);
+                ui.endCurveEdit();
+            }
+            span.appendChild(edit);
+            span.appendChild(send);
+            return span;
+        }
+        else {
+            var r = document.createElement("input");
+            r.entity = entity;
+            r.eprop = property;
+            r.setAttribute("class", "property "+property.type);
+            r.setAttribute("type", "text");
+            r.setAttribute("size", 32);
+            r.value = property.value;
+            if(property.setter) {
+                r.setAttribute("onfocus", "this.lockUpdate=true");
+                r.setAttribute("onblur", "this.lockUpdate=false");
+                r.setAttribute("onchange", "this.handleChange()");
+                r.handleChange = function() {
+                    var value = this.eprop.type+"("+this.value.gsub(" ", "")+")";
+                    callRequest(this.entity, this.eprop.setter, value);
+                }
+            }
+            else {
+                r.disabled = true;
+            }
+            return r;
+        }
+    },
+
+    updateEntityProperties: function(entity)
+    {
+        var ajax = new Ajax.Request("/nuclei/entity", {
+            method: "post",
+            parameters: "entity="+entity,
+            onComplete: function(res) {
+                var properties = res.responseText.evalJSON();
+                var fields = ui.getProperties();
+                var parent = properties.find( function(a){return a.name=="parent";} );
+                clearChildren(fields);
+                {
+                    var classname = editor.getEntityClassName(entity);
+                    var t = document.createElement("li");
+                    t.appendChild(document.createTextNode(classname));
+                    fields.appendChild(t);
+                }
+                {
+                    var button = document.createElement("input");
+                    button.setAttribute("type", "button");
+                    button.value = "delete";
+                    button.nuEntity = entity;
+                    button.onclick = function(){
+                        postCommand("/nuclei/delete", "entity="+this.nuEntity);
+                    };
+                    var t = document.createElement("li");
+                    t.appendChild(button);
+                    fields.appendChild(t);
+                }
+                if(parent) {
+                    var button = document.createElement("input");
+                    button.setAttribute("type", "button");
+                    button.value = "select parent";
+                    button.nuParent = parent.value;
+                    button.onclick = function(){
+                        editor.setEntitySelection(this.nuParent);
+                    };
+                    var t = document.createElement("li");
+                    t.appendChild(button);
+                    fields.appendChild(t);
+                }
+                each(properties, function(field){
+                    var t = document.createElement("li");
+                    t.setAttribute("class", "property");
+                    t.appendChild(document.createTextNode(field.name+"("+field.type+") "));
+                    t.appendChild(ui.createPropertyInput(entity, field));
+                    t.entityProperty = field;
+                    fields.appendChild(t);
+                });
+            }
+        });
+    },
+
+    onClickEntityType: function()
+    {
+        var selector = ui.getTypeSelector();
+        each(selector.childNodes, function(e){
+            e.style.backgroundColor = "";
+        });
+        editor.entityDeployType = this.entitytype;
+        this.style.backgroundColor = "#FF0000";
+    },
+
+    beginCurveEdit: function()
+    {
+        editor.editMode = EditMode.Curve;
+        ui.updateCurvePoints();
+    },
+    endCurveEdit: function()
+    {
+        editor.editMode = EditMode.Entity;
+    },
+    updateCurvePoints: function()
+    {
+        var pointlist = $("curve_points");
+        var xline = editor.curve.x;
+        var yline = editor.curve.y;
+        resizeChildren(pointlist, xline.length+yline.length, function(){
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode(""));
+            return li;
+        });
+        var i = 0;
+        xline.each(function(p){ ui.updatePointProperty(pointlist.childNodes[i++],"x",p); });
+        yline.each(function(p){ ui.updatePointProperty(pointlist.childNodes[i++],"y",p); });
+    },
+    updatePointProperty: function(node, xy, p)
+    {
+        node.firstChild.data = xy+" time:"+p[0]+" value:"+p[1].toFixed(2)+" in:"+p[2].toFixed(2)+" out:"+p[3].toFixed(2)
+            +" "+curve.TypeStr[p[4]];
+    },
+
+    onLoad: function()
+    {
+        var ajax = new Ajax.Request("/nuclei/const", {
+            method: "get",
+            onComplete: function(res) {
+                var consts = res.responseText.evalJSON();
+                editor.setupConsts(consts);
+
+                var selector = ui.getTypeSelector();
+                for(var name in editor.entityTypes) {
+                    var value = editor.entityTypes[name];
+                    if(!value.deployable) { continue; }
+                    var t = document.createElement("li");
+                    t.setAttribute("class", "entitytype");
+                    t.appendChild(document.createTextNode(name));
+                    t.entitytype = value.id;
+                    t.onclick = ui.onClickEntityType;
+                    selector.appendChild(t);
+                }
+            }
+        });
+    }
+};
+
+
+
+function updateFPS() {
+    document.getElementById("fps").textContent = frame;
+    frame = 0;
+}
+
+function updateEntities()
+{
+    if(loading) { return; }
+
+    loading = true;
+
+    var ajax = new XMLHttpRequest();
+    ajax.open("GET", "/nuclei/state", true);
+    ajax.responseType = "arraybuffer";
+    ajax.onload = function (ev) {
+        loading = false;
+        var buf = ajax.response;
+        var rpos = 0;
+
+        var nums = new Uint32Array(buf, rpos, 4);
+        rpos += 4*4;
+        var num_entities = nums[0];
+        var num_bullets = nums[1];
+        var num_lasers = nums[2];
+        var num_fluids = nums[3];
+    
+        entities.ids = new Uint32Array(buf, rpos, num_entities);
+        rpos += 4 * num_entities;
+        entities.trans = new Float32Array(buf, rpos, num_entities*16);
+        rpos += 4*16 * num_entities;
+        entities.size = new Float32Array(buf, rpos, num_entities*3);
+        rpos += 4*3 * num_entities;
+        entities.color = new Float32Array(buf, rpos, num_entities*4);
+        rpos += 4*4 * num_entities;
+
+        entities.bullets = new Float32Array(buf, rpos, num_bullets*2);
+        rpos += 4*2 * num_bullets;
+
+        entities.lasers = new Float32Array(buf, rpos, num_lasers*3);
+        rpos += 4*3 * num_lasers;
+
+        entities.fluids = new Float32Array(buf, rpos, num_fluids*2);
+        rpos += 4*2 * num_fluids;
+    };
+    ajax.send(null);
+}
+
+var requestDraw = (function() {
+    return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(callback) { window.setTimeout(callback, delay); };
+})();
+
+
+
+function onLoadGL()
+{
+    var c = document.getElementById("c");
+    try {
+        gl = c.getContext("experimental-webgl", { depth: false });
+    }
+    catch(e) {
+    }
+    if (!gl) {
+        alert("WebGL is not supported on this browser.");
+        return;
+    }
+    initializeGLResources();
+}
+
+
+function onLoad()
+{
+    clearInterval(FPSTimer);
+    clearInterval(EntitiesTimer);
+
+    FPSTimer = setInterval(updateFPS, 1000);
+    EntitiesTimer = setInterval(updateEntities, 200);
+    time = new Date().getTime() - starttime;
+
+    var c = document.getElementById("c");
+
+    document.oncontextmenu = function() { return false; };
+
+    document.onmousemove = function(e) {
+        vec2.copy(mouse.screen_prev, mouse.screen);
+        vec2.set(mouse.screen, e.pageX, e.pageY);
+        var p_x = e.pageX / c.width;
+        var p_y = 1.0 - (e.pageY / c.height);
+        var gl_x = FieldX * (p_x-0.5)*2.0;
+        var gl_y = FieldY * (p_y-0.5)*2.0;
+        vec2.copy(mouse.pos_prev, mouse.pos);
+        vec2.set(mouse.pos, gl_x, gl_y);
+        editor.onMouseMove();
+    };
+
+    c.onmousedown = function(e) {
+        mouse.dragging = true;
+        mouse.button = e.button;
+        editor.onMouseDown();
+        e.preventDefault();
+    };
+
+    c.onmouseup = function(e) {
+        mouse.dragging = false;
+        editor.onMouseUp();
+        e.preventDefault();
+    };
+
+    ui.onLoad();
+
+    onLoadGL();
+    draw();
+}
+
+function draw()
+{
+    var t = (new Date().getTime() - starttime)*0.001;
+
+    drawGL();
+    frame++;
+    setTimeout("requestDraw(draw)", delay);
+}
+
+function makeCallCommand(entity, funcname, arg)
+{
+    return entity.toString()+"->"+funcname+"("+arg+")";
+}
+
+function callRequest(entity, funcname, arg)
+{
+    postCommand("/nuclei/call", makeCallCommand(entity,funcname,arg));
+}
+
+function postCommand(url, values)
+{
+    var ajax = new Ajax.Request(url,
+    {
+        method: "post",
+        parameters: values,
+        onComplete: function(res) {
+        }
+    });
+}
+
+</script>
+
+
+<style type="text/css">
+#c { position:absolute; left:0px; top:0px; }
+#fps { position:absolute; left:2px; top:2px; color:#FFFFFF ;}
+#toolwindow { position:absolute; left:1024px; top:0px; width:400px; }
+.toolpanel { border:1px solid #000000; margin:5px; padding:5px; }
+.toolcaption { border:1px solid #000000; margin:2px; padding:2px; }
+.dataitem { margin:2px; padding:2px; }
+.datalist { margin:2px; padding:2px; }
+
+#entity_type_panel {}
+#entity_property_panel {}
+#entity_list_panel { max-height:400px; overflow:auto; }
+#curve_panel {}
+</style>
+</head>
+
+<body onload="onLoad()"
+><canvas id="c" width="1024" height="1024"></canvas><span id="fps">00</span
+><div id="toolwindow"
+><div id="entity_type_panel" class="toolpanel"><ul id="entity_type_list" class="datalist"></ul></div
+><div id="entity_property_panel" class="toolpanel"><ul id="entity_property_list" class="datalist"></ul></div
+><div id="entity_list_panel" class="toolpanel"><ul id="entity_list" class="datalist"></ul></div
+><div id="curve_panel" class="toolpanel"
+><input type="button" value="edit" onclick="ui.beginCurveEdit()" /><input type="button" value="done" onclick="ui.endCurveEdit()" /><ul id="curve_points" class="datalist"></ul></div
+><a href="http://primitive-games.jp/atomic/">about atomic</a
+></div
+></body
+></html>

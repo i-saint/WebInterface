@@ -8,12 +8,48 @@
 #include "wiUtils.h"
 
 
-struct wiCommandHandlerInitialize
+struct wiRequestHandlerInitialize
 {
-    wiCommandHandlerInitialize() {
+    wiRequestHandlerInitialize() {
         wiRequestHandler::getHandlerTable();
     }
-} g_wiCommandHandlerInitialize;
+} g_wiRequestHandlerInitialize;
+
+
+
+struct MIMEType { const char *ext; const char *type; };
+static const MIMEType s_mime_types[] = {
+    { ".txt", "text/plain" },
+    { ".html", "text/html" },
+    { ".css", "text/css" },
+    { ".js", "text/javascript" },
+    { ".png", "image/png" },
+    { ".jpg", "image/jpeg" },
+    { ".gif", "image/gif" },
+};
+
+wiFileRequestHandler::wiFileRequestHandler(const std::string &path)
+    : m_path(path)
+{
+}
+
+void wiFileRequestHandler::handleRequest(HTTPServerRequest &request, HTTPServerResponse &response)
+{
+    const char *ext = s_mime_types[0].ext;
+    const char *mime = s_mime_types[0].type;
+    size_t epos = m_path.find_last_of(".");
+    if (epos != std::string::npos) {
+        ext = &m_path[epos];
+        for (size_t i = 0; i < _countof(s_mime_types); ++i) {
+            if (strcmp(ext, s_mime_types[i].ext) == 0) {
+                mime = s_mime_types[i].type;
+            }
+        }
+    }
+    response.sendFile(m_path, mime);
+}
+
+
 
 
 wiRequestHandler::HandlerTable& wiRequestHandler::getHandlerTable()

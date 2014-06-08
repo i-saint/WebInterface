@@ -8,62 +8,21 @@
 #include "wiUtils.h"
 
 
-const char s_fileserver_base_dir[] = "editor";
-
-struct MIMEType { const char *ext; const char *type; };
-static const MIMEType s_mime_types[] = {
-    {".txt",  "text/plain"},
-    {".html", "text/html"},
-    {".css",  "text/css"},
-    {".js",   "text/javascript"},
-    {".png",  "image/png"},
-    {".jpg",  "image/jpeg" },
-    {".gif",  "image/gif" },
-};
-
-
-class wiFileRequestHandler : public Poco::Net::HTTPRequestHandler
-{
-public:
-    wiFileRequestHandler(const std::string &path)
-        : m_path(path)
-    {
-    }
-
-    void handleRequest(HTTPServerRequest &request, HTTPServerResponse &response)
-    {
-        const char *ext = s_mime_types[0].ext;
-        const char *mime = s_mime_types[0].type;
-        size_t epos = m_path.find_last_of(".");
-        if(epos!=std::string::npos) {
-            ext = &m_path[epos];
-            for(size_t i=0; i<_countof(s_mime_types); ++i) {
-                if(strcmp(ext, s_mime_types[i].ext)==0) {
-                    mime = s_mime_types[i].type;
-                }
-            }
-        }
-        response.sendFile(m_path, mime);
-    }
-
-private:
-    std::string m_path;
-};
-
 
 class wiRequestHandlerFactory : public Poco::Net::HTTPRequestHandlerFactory
 {
 public:
     virtual Poco::Net::HTTPRequestHandler* createRequestHandler(const HTTPServerRequest &request)
     {
+        const std::string &root_dir = wiServer::getInstance()->getConfig().root_dir;
         if(request.getURI()=="/") {
-            return new wiFileRequestHandler(std::string(s_fileserver_base_dir)+"/index.html");
+            return new wiFileRequestHandler(root_dir + "/index.html");
         }
         else if( wiRequestHandler::findHandler(request.getURI()) ) {
             return new wiRequestHandler();
         }
         else {
-            std::string path = std::string(s_fileserver_base_dir)+request.getURI();
+            std::string path = root_dir + request.getURI();
             Poco::File file(path);
             if(file.exists()) {
                 return new wiFileRequestHandler(path);
@@ -102,7 +61,8 @@ wiServer* wiServer::getInstance()
 
 
 wiServerConfig::wiServerConfig()
-    : max_queue(100)
+    : root_dir("WebInterface")
+    , max_queue(100)
     , max_threads(4)
     , port(8080)
 {

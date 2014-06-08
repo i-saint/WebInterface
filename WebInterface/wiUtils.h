@@ -1,3 +1,7 @@
+// created by i-saint
+// distributed under Creative Commons Attribution (CC BY) license.
+// https://github.com/i-saint/WebInterface
+
 #ifndef wiUtils_h
 #define wiUtils_h
 
@@ -42,4 +46,3 @@ inline void wiMiliSleep(uint32 millisec)
 #define wiAssert assert
 
 #endif // wiUtils_h
-

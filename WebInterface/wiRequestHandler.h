@@ -7,6 +7,17 @@
 #include "wiEvent.h"
 
 
+class wiFileRequestHandler : public Poco::Net::HTTPRequestHandler
+{
+public:
+    wiFileRequestHandler(const std::string &path);
+    void handleRequest(HTTPServerRequest &request, HTTPServerResponse &response);
+
+private:
+    std::string m_path;
+};
+
+
 class wiRequestHandler : public Poco::Net::HTTPRequestHandler
 {
 public:
@@ -33,6 +44,5 @@ private:
     void handleState(HTTPServerRequest &request, HTTPServerResponse &response);
     void handleConst(HTTPServerRequest &request, HTTPServerResponse &response);
 };
-
 
 #endif // wiRequestHandler_h

@@ -4,6 +4,7 @@
 
 #ifndef wiServer_h
 #define wiServer_h
+
 #include "externals.h"
 #include "wiEvent.h"
 
@@ -11,6 +12,7 @@ class wiRequestHandler;
 
 struct wiServerConfig
 {
+    std::string root_dir;
     uint32 max_queue;
     uint32 max_threads;
     uint16 port;
@@ -65,7 +67,7 @@ public:
 
     void handleEvents(const EventHandler &h);
     void handleQueries(const QueryHandler &h);
-
+    const wiServerConfig& getConfig() const { return m_conf; }
 
 private:
     wiServer();
@@ -99,7 +101,7 @@ private:
 wiExport void wiStartServer(wiServerConfig *conf);
 wiExport void wiStopServer();
 wiExport void wiSetViewProjectionMatrix(mat4 view, mat4 proj);
-wiExport void wiAddGameObject(uint32_t id, wiGameObjectData data);
-wiExport void wiDeleteGameObject(uint32_t id);
+wiExport void wiAddGameObject(int32 id, wiGameObjectData data);
+wiExport void wiDeleteGameObject(int32 id);
 
 #endif // wiServer_h

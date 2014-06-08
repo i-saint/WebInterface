@@ -65,6 +65,7 @@ wiEvent::~wiEvent()
 }
 
 wiEvent::wiEvent(wiEventTypeID tid)
+    : m_type(tid)
 {
 }
 

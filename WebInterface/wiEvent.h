@@ -51,7 +51,7 @@ class wiEvent
 {
 public:
     wiEvent(wiEventTypeID tid);
-    virtual ~wiEvent();
+    ~wiEvent();
     wiEventTypeID       getTypeID() const   { return m_type; }
     std::string&        getClientID()       { return m_clientID; }
     std::string&        getData()           { return m_data; }
@@ -70,7 +70,7 @@ class wiQuery
 {
 public:
     wiQuery(wiQueryTypeID tid);
-    virtual ~wiQuery();
+    ~wiQuery();
     wiQueryTypeID       getTypeID() const   { return m_type; }
     std::string&        getClientID()       { return m_clientID; }
     std::string&        getData()           { return m_data; }

@@ -71,7 +71,7 @@ public class wiSystem
                 case "entity":
                     {
                         int id = Convert.ToInt32(value);
-                        receiver = entities[id];
+                        entities.TryGetValue(id, out receiver);
                     }
                     break;
                 case "mouseX":
@@ -87,7 +87,7 @@ public class wiSystem
                 case "target":
                     {
                         int id = Convert.ToInt32(value);
-                        action.target = entities[id];
+                        entities.TryGetValue(id, out action.target);
                     }
                     break;
             }
@@ -116,10 +116,11 @@ public class wiServer : MonoBehaviour
         wi.wiStopServer();
     }
 
-    void Start ()
+    unsafe void Start ()
     {
         Application.runInBackground = true;
         wi.wiStartServer();
+        wi.wiSetActionCallback(wiSystem.OnActionHandler);
     }
     
     unsafe void Update ()

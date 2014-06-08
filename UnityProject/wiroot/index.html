@@ -99,8 +99,8 @@ var Button = {
     Middle  : 1,
     Right   : 2,
 };
-var FieldX = 2.56;
-var FieldY = 2.56;
+var FieldX = 10.12;
+var FieldY = 10.12;
 
 var gl;
 var ext;
@@ -275,7 +275,7 @@ function updateEntities()
         var nums = new Uint32Array(buf, rpos, 1);
         rpos += 4;
         var num_entities = nums[0];
-    
+
         entities.ids = new Uint32Array(buf, rpos, num_entities);
         rpos += 4 * num_entities;
         entities.trans = new Float32Array(buf, rpos, num_entities*16);

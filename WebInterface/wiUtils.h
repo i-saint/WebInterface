@@ -19,8 +19,8 @@ inline void wiGetDecodedRequestBody(HTTPServerRequest &request, std::string &out
     Poco::URI::decode(encoded_data, out);
 }
 
-template<class Func>
-inline void wiEachFormData(const std::string &form_fata, const Func &f)
+template<class F>
+inline void wiEachFormData(std::string &form_fata, const F &f)
 {
     size_t pos = 0;
     size_t sep = 0;
@@ -35,6 +35,29 @@ inline void wiEachFormData(const std::string &form_fata, const Func &f)
     }
     f(&form_fata[pos], sep - pos);
 }
+
+inline void wiBuildKeyValuePairs(std::string &data, wiKeyValueCont &pairs)
+{
+    wiEachFormData(data, [&](char *str, size_t len){
+        wiKeyValue kv;
+        char *k = str;
+        char *v = std::find(str, str + len, '=');
+        k[len] = '\0';
+        *v = '\0';
+        ++v;
+        kv.key = k;
+        kv.value = v;
+        pairs.push_back(kv);
+    });
+}
+
+inline void wiBuildEventData(HTTPServerRequest &request, wiEventPtr evt)
+{
+    std::string &data = evt->getData();
+    wiGetDecodedRequestBody(request, data);
+    wiBuildKeyValuePairs(data, evt->getPairs());
+}
+
 
 inline void wiMiliSleep(uint32 millisec)
 {

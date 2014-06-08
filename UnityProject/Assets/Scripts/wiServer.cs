@@ -1,10 +1,15 @@
 ﻿using UnityEngine;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
+
 
 public class wiSystem
 {
-    static wiSystem instance;
+    public static wiSystem instance;
+    public Dictionary<int, wiComponent> entities;
+    int IDSeed = 0;
 
     public static wiSystem GetInstance()
     {
@@ -15,63 +20,111 @@ public class wiSystem
         return instance;
     }
 
-
-    Dictionary<int, GameObject> objects;
-    int IDSeed = 0;
-
     wiSystem()
     {
-        objects = new Dictionary<int, GameObject>();
+        entities = new Dictionary<int, wiComponent>();
     }
 
-    public int AddObject(GameObject obj)
+    public int AddObject(wiComponent obj)
     {
         int id = IDSeed++;
-        objects.Add(id, obj);
+        entities.Add(id, obj);
         return id;
     }
 
     public void DeleteObject(int id)
     {
-        objects.Remove(id);
+        entities.Remove(id);
     }
 
-    public void ClearObjects()
+
+    public unsafe void Update()
     {
-        objects.Clear();
+        wi.wiEntityData[] data = new wi.wiEntityData[entities.Count];
+        int i = 0;
+        foreach (KeyValuePair<int, wiComponent> kvp in entities)
+        {
+            data[i].id = kvp.Key;
+            data[i].transform = kvp.Value.transform.localToWorldMatrix;
+            data[i].size = Vector4.one;
+            data[i].color = Vector4.one*0.5f;
+            ++i;
+        }
+        fixed (wi.wiEntityData* ptr = data)
+        {
+            wi.wiSetEntityData(entities.Count, ptr);
+            wi.wiUpdate();
+        }
     }
 
-    public void Update()
+    public unsafe void OnAction(int num, wi.wiKeyValue* kvps)
     {
+        var entities = wiSystem.GetInstance().entities;
+        wiComponent receiver = null;
+        wi.wiActionData action = new wi.wiActionData();
+        for (int i = 0; i < num; ++i)
+        {
+            string name = Marshal.PtrToStringAnsi((IntPtr)kvps[i].name);
+            string value = Marshal.PtrToStringAnsi((IntPtr)kvps[i].value);
+            switch (name)
+            {
+                case "entity":
+                    {
+                        int id = Convert.ToInt32(value);
+                        receiver = entities[id];
+                    }
+                    break;
+                case "mouseX":
+                    {
+                        action.mouse.x = Convert.ToSingle(value);
+                    }
+                    break;
+                case "mouseY":
+                    {
+                        action.mouse.y = Convert.ToSingle(value);
+                    }
+                    break;
+                case "target":
+                    {
+                        int id = Convert.ToInt32(value);
+                        action.target = entities[id];
+                    }
+                    break;
+            }
+        }
+        if (receiver)
+        {
+            receiver.OnAction(action);
+        }
+    }
 
+    public static unsafe void OnActionHandler(int num, wi.wiKeyValue* kvps)
+    {
+        instance.OnAction(num, kvps);
     }
 }
 
-public class wiServer
+public class wiServer : MonoBehaviour
 {
-
-
-
-
     void OnDestroy()
     {
-        WebInterface.wiStopServer();
+        wi.wiStopServer();
     }
 
     void Reset()
     {
-        WebInterface.wiStopServer();
+        wi.wiStopServer();
     }
 
     void Start ()
     {
-        WebInterface.wiStartServer();
+        Application.runInBackground = true;
+        wi.wiStartServer();
     }
     
-    void Update ()
+    unsafe void Update ()
     {
-        foreach(KeyValuePair<int,GameObject> kvp in objects) {
-
-        }
+        wiSystem.GetInstance().Update();
     }
+
 }

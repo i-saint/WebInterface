@@ -56,12 +56,13 @@ void wiServer::finalizeInstance()
 
 wiServer* wiServer::getInstance()
 {
+    initializeInstance();
     return s_inst;
 }
 
 
 wiServerConfig::wiServerConfig()
-    : root_dir("WebInterface")
+    : root_dir("wiroot")
     , max_queue(100)
     , max_threads(4)
     , port(8080)
@@ -71,8 +72,17 @@ wiServerConfig::wiServerConfig()
 wiServer::wiServer()
     : m_server(nullptr)
     , m_end_flag(false)
+
+    , m_entities_timestamp(0)
+
+    , m_onconnect(nullptr)
+    , m_ondisconnect(nullptr)
+    , m_onselect(nullptr)
+    , m_ondisselect(nullptr)
+    , m_onaction(nullptr)
 {
-    m_events.reserve(128);
+    m_events.reserve(32);
+    m_entities.reserve(128);
 }
 
 wiServer::~wiServer()
@@ -83,6 +93,8 @@ wiServer::~wiServer()
 void wiServer::start()
 {
     if(!m_server) {
+        m_end_flag = false;
+
         Poco::Net::HTTPServerParams* params = new Poco::Net::HTTPServerParams;
         params->setMaxQueued(m_conf.max_queue);
         params->setMaxThreads(m_conf.max_threads);
@@ -120,43 +132,88 @@ void wiServer::restart()
     start();
 }
 
-void wiServer::handleEvents( const EventHandler &h )
+void wiServer::update()
+{
+    handleEvents();
+    handleQueries();
+}
+
+void wiServer::handleEvents()
 {
     {
         std::unique_lock<std::mutex> lock(m_mutex_events);
         m_events_tmp = m_events;
         m_events.clear();
     }
-    for(size_t i=0; i<m_events_tmp.size(); ++i) {
-        h(*m_events_tmp[i]);
+
+    for(size_t ei=0; ei<m_events_tmp.size(); ++ei) {
+        wiEvent *e = m_events_tmp[ei].get();
+        int num_pairs = e->getPairs().size();
+        wiKeyValue *kvp = num_pairs == 0 ? nullptr : &e->getPairs()[0];
+
+#define Handle(Type, Handler) case Type: if (Handler) { Handler(num_pairs, kvp); } break
+        switch (e->getTypeID()) {
+            Handle(wiET_Connect,    m_onconnect);
+            Handle(wiET_Disconnect, m_ondisconnect);
+            Handle(wiET_Select,     m_onselect);
+            Handle(wiET_Disselect,  m_ondisconnect);
+            Handle(wiET_Action,     m_onaction);
+        }
+#undef Handle
     }
     m_events_tmp.clear();
 }
 
-void wiServer::handleQueries( const QueryHandler &h )
+void wiServer::handleQueries()
 {
     {
         std::unique_lock<std::mutex> lock(m_mutex_queries);
-        for(size_t i=0; i<m_queries.size(); ++i) {
-            h(*m_queries[i]);
-            m_queries[i]->m_completed = true;
-        }
+        m_queries_tmp = m_queries;
         m_queries.clear();
     }
+
+    for (size_t qi = 0; qi < m_queries_tmp.size(); ++qi) {
+        wiQuery *q = m_queries_tmp[qi].get();
+        switch (q->getTypeID()) {
+        case wiQT_State: buildEntityDataStream(q->getResponse()); break;
+        }
+        q->m_completed = true;
+    }
+    m_queries_tmp.clear();
+}
+
+void wiServer::buildEntityDataStream(std::string &out)
+{
+    // todo: caching
+    {
+        m_entities_timestamp = m_entities_stream.timestamp;
+        m_entities_stream.resize(m_entities.size());
+        for (size_t i = 0; i < m_entities.size(); ++i) {
+            m_entities_stream.id[i]    = m_entities[i].id;
+            m_entities_stream.trans[i] = m_entities[i].trans;
+            m_entities_stream.size[i]  = m_entities[i].size;
+            m_entities_stream.color[i] = m_entities[i].color;
+        }
+    }
+    m_entities_stream.makeArrayBuffer(out);
 }
 
 void wiServer::pushEvent( wiEventPtr evt )
 {
     if(m_end_flag) { return; }
-    std::unique_lock<std::mutex> lock(m_mutex_events);
-    m_events.push_back(evt);
+    {
+        std::unique_lock<std::mutex> lock(m_mutex_events);
+        m_events.push_back(evt);
+    }
 }
 
 void wiServer::pushQuery( wiQueryPtr q )
 {
     if(m_end_flag) { return; }
-    std::unique_lock<std::mutex> lock(m_mutex_queries);
-    m_queries.push_back(q);
+    {
+        std::unique_lock<std::mutex> lock(m_mutex_queries);
+        m_queries.push_back(q);
+    }
 }
 
 void wiServer::clearQuery()
@@ -166,4 +223,67 @@ void wiServer::clearQuery()
         m_queries[i]->m_completed = true;
     }
     m_queries.clear();
+}
+
+
+
+
+wiExport void wiStartServer()
+{
+    wiServer::getInstance()->start();
+}
+
+wiExport void wiStopServer()
+{
+    wiServer::getInstance()->stop();
+}
+
+wiExport void wiUpdate()
+{
+    wiServer::getInstance()->update();
+}
+
+wiExport void wiSetViewProjectionMatrix(mat4 view, mat4 proj)
+{
+    wiServer::getInstance()->m_mvp = view * proj;
+}
+
+wiExport void wiSetConnectCallback(wiCallback cb)
+{
+    wiServer::getInstance()->m_onconnect = cb;
+}
+
+wiExport void wiSetDisconnectCallback(wiCallback cb)
+{
+    wiServer::getInstance()->m_ondisconnect = cb;
+}
+
+wiExport void wiSetSelectCallback(wiCallback cb)
+{
+    wiServer::getInstance()->m_onselect = cb;
+}
+
+wiExport void wiSetDisselectCallback(wiCallback cb)
+{
+    wiServer::getInstance()->m_ondisselect = cb;
+}
+
+wiExport void wiSetActionCallback(wiCallback cb)
+{
+    wiServer::getInstance()->m_onaction = cb;
+}
+
+wiExport void wiSetEntityData(int32 num, wiEntityData *data)
+{
+    if (num == 0) {
+        wiServer::getInstance()->m_entities.clear();
+    }
+    else {
+        wiServer::getInstance()->m_entities.assign(data, data + num);
+    }
+}
+
+wiExport void wiClearEntityData()
+{
+    wiServer::getInstance()->m_entities.clear();
 }

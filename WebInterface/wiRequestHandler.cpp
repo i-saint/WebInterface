@@ -56,6 +56,8 @@ wiRequestHandler::HandlerTable& wiRequestHandler::getHandlerTable()
 {
     static HandlerTable s_table;
     if(s_table.empty()) {
+        s_table["/connect"]   = [](wiRequestHandler *o, HTTPServerRequest &req, HTTPServerResponse &res){ o->handleConnect(req, res); };
+        s_table["/disconnect"]= [](wiRequestHandler *o, HTTPServerRequest &req, HTTPServerResponse &res){ o->handleDisconnect(req, res); };
         s_table["/select"]    = [](wiRequestHandler *o, HTTPServerRequest &req, HTTPServerResponse &res){ o->handleSelect(req, res); };
         s_table["/disselect"] = [](wiRequestHandler *o, HTTPServerRequest &req, HTTPServerResponse &res){ o->handleDisselect(req, res); };
         s_table["/action"]    = [](wiRequestHandler *o, HTTPServerRequest &req, HTTPServerResponse &res){ o->handleAction(req, res); };
@@ -97,58 +99,59 @@ void wiRequestHandler::respondCode(HTTPServerResponse &response, int32 code)
     ostr.write(str, len);
 }
 
+void wiRequestHandler::handleConnect(HTTPServerRequest &request, HTTPServerResponse &response)
+{
+    wiEventPtr evt(new wiEvent(wiET_Connect));
+    wiBuildEventData(request, evt);
+    wiServer::getInstance()->pushEvent(evt);
+    respondCode(response, 0);
+}
+
+void wiRequestHandler::handleDisconnect(HTTPServerRequest &request, HTTPServerResponse &response)
+{
+    wiEventPtr evt(new wiEvent(wiET_Disselect));
+    wiBuildEventData(request, evt);
+    wiServer::getInstance()->pushEvent(evt);
+    respondCode(response, 0);
+}
+
 void wiRequestHandler::handleSelect(HTTPServerRequest &request, HTTPServerResponse &response)
 {
-    wiEventSelect *evt = new wiEventSelect();
-    std::string data;
-    wiGetDecodedRequestBody(request, data);
-
-    // todo:
-
-    wiServer::getInstance()->pushEvent(wiEventPtr(evt));
+    wiEventPtr evt(new wiEvent(wiET_Select));
+    wiBuildEventData(request, evt);
+    wiServer::getInstance()->pushEvent(evt);
     respondCode(response, 0);
 }
 
 void wiRequestHandler::handleDisselect(HTTPServerRequest &request, HTTPServerResponse &response)
 {
-    wiEventDisselect *evt = new wiEventDisselect();
-    std::string data;
-    wiGetDecodedRequestBody(request, data);
-
-    // todo:
-
-    wiServer::getInstance()->pushEvent(wiEventPtr(evt));
+    wiEventPtr evt(new wiEvent(wiET_Disselect));
+    wiBuildEventData(request, evt);
+    wiServer::getInstance()->pushEvent(evt);
     respondCode(response, 0);
 }
 
 
 void wiRequestHandler::handleAction(HTTPServerRequest &request, HTTPServerResponse &response)
 {
-    wiEventAction *evt = new wiEventAction();
-    std::string data;
-    wiGetDecodedRequestBody(request, data);
-
-    // todo:
-
-    wiServer::getInstance()->pushEvent(wiEventPtr(evt));
+    wiEventPtr evt(new wiEvent(wiET_Action));
+    wiBuildEventData(request, evt);
+    wiServer::getInstance()->pushEvent(evt);
     respondCode(response, 0);
 }
 
 void wiRequestHandler::handleState(HTTPServerRequest &request, HTTPServerResponse &response)
 {
-    std::string data;
+    wiQueryPtr q(new wiQuery(wiQT_State));
+    std::string &data = q->getData();
     wiGetDecodedRequestBody(request, data);
-
-    uint32 h = 0;
-    sscanf(data.c_str(), "entity=%u", &h);
-
-    wiQueryPtr q(new wiQueryStatus());
+    wiBuildKeyValuePairs(data, q->getPairs());
     wiServer::getInstance()->pushQuery(q);
     while(!q->m_completed && !wiServer::getInstance()->endFlag()) {
         wiMiliSleep(5);
     }
 
-    response.setContentType("application/json");
+    response.setContentType("application/octet-stream");
     response.setContentLength(q->m_response.size());
     std::ostream &ostr = response.send();
     ostr << q->m_response;

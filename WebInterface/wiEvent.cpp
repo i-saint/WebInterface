@@ -6,7 +6,12 @@
 #include "wiEvent.h"
 
 
-void wiStatus::clear()
+wiEntityDataStream::wiEntityDataStream()
+    : timestamp(0)
+{
+}
+
+void wiEntityDataStream::clear()
 {
     id.clear();
     trans.clear();
@@ -14,16 +19,24 @@ void wiStatus::clear()
     color.clear();
 }
 
-size_t wiStatus::sizeByte() const
+void wiEntityDataStream::resize(size_t n)
+{
+    id.resize(n);
+    trans.resize(n);
+    size.resize(n);
+    color.resize(n);
+}
+
+size_t wiEntityDataStream::sizeByte() const
 {
     return
-        sizeof(uint32)* id.size() +
+        sizeof(int32) * id.size() +
         sizeof(mat4)  * trans.size() +
-        sizeof(vec3)  * size.size() +
+        sizeof(vec4)  * size.size() +
         sizeof(vec4)  * color.size();
 }
 
-void wiStatus::makeArrayBuffer(std::string &out)
+void wiEntityDataStream::makeArrayBuffer(std::string &out)
 {
     uint32 wpos = 0;
 
@@ -35,11 +48,11 @@ void wiStatus::makeArrayBuffer(std::string &out)
 
     if(num_entities) {
         memcpy(&out[wpos], &id[0], sizeof(id)*num_entities);
-        wpos += sizeof(uint32)*num_entities;
+        wpos += sizeof(int32)*num_entities;
         memcpy(&out[wpos], &trans[0], sizeof(mat4)*num_entities);
         wpos += sizeof(mat4)*num_entities;
-        memcpy(&out[wpos], &size[0], sizeof(vec3)*num_entities);
-        wpos += sizeof(vec3)*num_entities;
+        memcpy(&out[wpos], &size[0], sizeof(vec4)*num_entities);
+        wpos += sizeof(vec4)*num_entities;
         memcpy(&out[wpos], &color[0], sizeof(vec4)*num_entities);
         wpos += sizeof(vec4)*num_entities;
     }
@@ -55,34 +68,6 @@ wiEvent::wiEvent(wiEventTypeID tid)
 {
 }
 
-wiEventConnect::wiEventConnect()
-    : super(wiCT_Connect)
-{
-}
-
-wiEventDisconnect::wiEventDisconnect()
-    : super(wiCT_Disconnect)
-{
-}
-
-wiEventSelect::wiEventSelect()
-    : super(wiCT_Select)
-    , id(-1)
-{
-}
-
-wiEventDisselect::wiEventDisselect()
-    : super(wiCT_Disselect)
-    , id(-1)
-{
-}
-
-wiEventAction::wiEventAction()
-    : super(wiCT_Action)
-    , id(-1)
-{
-}
-
 
 wiQuery::wiQuery(wiQueryTypeID tid)
     : m_type(tid)
@@ -92,8 +77,3 @@ wiQuery::wiQuery(wiQueryTypeID tid)
 }
 
 wiQuery::~wiQuery() {}
-
-wiQueryStatus::wiQueryStatus()
-    : super(wiQT_State)
-{
-}

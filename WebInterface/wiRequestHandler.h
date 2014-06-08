@@ -34,9 +34,11 @@ public:
 public:
     wiRequestHandler();
     void handleRequest(HTTPServerRequest &request, HTTPServerResponse &response);
-    void respondCode(HTTPServerResponse &response, int32 code);
 
 private:
+    void respondCode(HTTPServerResponse &response, int32 code);
+    void handleConnect(HTTPServerRequest &request, HTTPServerResponse &response);
+    void handleDisconnect(HTTPServerRequest &request, HTTPServerResponse &response);
     void handleSelect(HTTPServerRequest &request, HTTPServerResponse &response);
     void handleDisselect(HTTPServerRequest &request, HTTPServerResponse &response);
     void handleAction(HTTPServerRequest &request, HTTPServerResponse &response);

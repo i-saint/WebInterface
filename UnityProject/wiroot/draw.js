@@ -35,11 +35,6 @@ function initializeGLResources()
     sh_points.u_proj = gl.getUniformLocation(sh_points, "u_proj");
     sh_points.u_pointSize = gl.getUniformLocation(sh_points, "u_pointSize");
 
-    sh_lasers = createShaderProgram("vs_lasers", "ps_lasers");
-    sh_lasers.ia_position = gl.getAttribLocation(sh_lasers, "ia_position");
-    sh_lasers.u_proj = gl.getUniformLocation(sh_lasers, "u_proj");
-    sh_lasers.u_color = gl.getUniformLocation(sh_lasers, "u_color");
-
 
     var quad_vertices = new Float32Array([
         -1.0, -1.0,
@@ -99,12 +94,6 @@ function initializeGLResources()
     ib_cube_line = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib_cube_line);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cube_line_indices, gl.STATIC_DRAW);
-
-    vb_bullets = gl.createBuffer();
-    vb_lasers = gl.createBuffer();
-    vb_fluids = gl.createBuffer();
-    vb_curve = gl.createBuffer();
-    vb_curve_points = gl.createBuffer();
 }
 
 

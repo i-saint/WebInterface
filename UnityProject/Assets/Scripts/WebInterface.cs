@@ -38,9 +38,48 @@ public class wi
     [DllImport ("WebInterface")] public static extern void wiClearEntityData();
 
 
+
+
+    // utilities
+
     public struct wiActionData
     {
         public Vector3 mouse;
         public wiComponent target;
+
+        public static wiActionData Build(Dictionary<String,String> dic)
+        {
+            wiActionData ret = new wiActionData();
+            var entities = wiSystem.GetInstance().entities;
+            foreach (var pair in dic)
+            {
+                try
+                {
+                    string key = pair.Key;
+                    string value = pair.Value;
+                    switch (key)
+                    {
+                        case "mouseX":
+                            {
+                                ret.mouse.x = Convert.ToSingle(value);
+                            }
+                            break;
+                        case "mouseY":
+                            {
+                                ret.mouse.z = Convert.ToSingle(value);
+                            }
+                            break;
+                        case "target":
+                            {
+                                int id = Convert.ToInt32(value);
+                                entities.TryGetValue(id, out ret.target);
+                            }
+                            break;
+                    }
+                }
+                catch (Exception) { }
+            }
+            return ret;
+        }
     }
 }

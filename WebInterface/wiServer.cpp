@@ -156,7 +156,7 @@ void wiServer::handleEvents()
             Handle(wiET_Connect,    m_onconnect);
             Handle(wiET_Disconnect, m_ondisconnect);
             Handle(wiET_Select,     m_onselect);
-            Handle(wiET_Disselect,  m_ondisconnect);
+            Handle(wiET_Disselect,  m_ondisselect);
             Handle(wiET_Action,     m_onaction);
         }
 #undef Handle

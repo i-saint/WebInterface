@@ -12,7 +12,7 @@ struct wiKeyValue
     const char *value;
 };
 typedef std::vector<wiKeyValue> wiKeyValueCont;
-typedef void(*wiCallback)(int num_pairs, const wiKeyValue *pairs);
+typedef void(__stdcall *wiCallback)(int num_pairs, const wiKeyValue *pairs);
 
 struct wiEntityDataStream
 {

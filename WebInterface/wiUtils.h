@@ -55,7 +55,9 @@ inline void wiBuildEventData(HTTPServerRequest &request, wiEventPtr evt)
 {
     std::string &data = evt->getData();
     wiGetDecodedRequestBody(request, data);
-    wiBuildKeyValuePairs(data, evt->getPairs());
+    if (!data.empty()) {
+        wiBuildKeyValuePairs(data, evt->getPairs());
+    }
 }
 
 

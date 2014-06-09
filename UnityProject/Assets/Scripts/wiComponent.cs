@@ -1,13 +1,16 @@
 ﻿using UnityEngine;
+using System;
 using System.Collections;
+using System.Collections.Generic;
 
 public class wiComponent : MonoBehaviour {
 
-    public delegate void Callback(wi.wiActionData data);
+    public delegate void Callback(Dictionary<String, String> kvp);
     public Callback onAction;
+    public Vector4 color = Vector4.one*0.5f;
     int id;
 
-	void Start ()
+    void Start ()
     {
         id = wiSystem.GetInstance().AddObject(this);
     }
@@ -17,8 +20,8 @@ public class wiComponent : MonoBehaviour {
         wiSystem.GetInstance().DeleteObject(id);
     }
 
-    public virtual void OnAction(wi.wiActionData data)
+    public virtual void OnAction(Dictionary<String, String> kvp)
     {
-        if (onAction != null) { onAction(data); }
+        if (onAction != null) { onAction(kvp); }
     }
 }

@@ -11,6 +11,9 @@ public class wiSystem
     public Dictionary<int, wiComponent> entities;
     int IDSeed = 0;
 
+    public delegate void Callback(Dictionary<String, String> kvp);
+    public Callback onAction;
+
     public static wiSystem GetInstance()
     {
         if (instance == null)
@@ -46,8 +49,8 @@ public class wiSystem
         {
             data[i].id = kvp.Key;
             data[i].transform = kvp.Value.transform.localToWorldMatrix;
-            data[i].size = Vector4.one;
-            data[i].color = Vector4.one*0.5f;
+            data[i].size = Vector4.one*0.5f;
+            data[i].color = kvp.Value.color;
             ++i;
         }
         fixed (wi.wiEntityData* ptr = data)
@@ -60,12 +63,13 @@ public class wiSystem
     public unsafe void OnAction(int num, wi.wiKeyValue* kvps)
     {
         var entities = wiSystem.GetInstance().entities;
+        Dictionary<String, String> dic = new Dictionary<String, String>();
         wiComponent receiver = null;
-        wi.wiActionData action = new wi.wiActionData();
         for (int i = 0; i < num; ++i)
         {
             string name = Marshal.PtrToStringAnsi((IntPtr)kvps[i].name);
             string value = Marshal.PtrToStringAnsi((IntPtr)kvps[i].value);
+            dic.Add(name, value);
             switch (name)
             {
                 case "entity":
@@ -74,33 +78,10 @@ public class wiSystem
                         entities.TryGetValue(id, out receiver);
                     }
                     break;
-                case "mouseX":
-                    {
-                        action.mouse.x = Convert.ToSingle(value);
-                    }
-                    break;
-                case "mouseY":
-                    {
-                        action.mouse.y = Convert.ToSingle(value);
-                    }
-                    break;
-                case "target":
-                    {
-                        int id = Convert.ToInt32(value);
-                        entities.TryGetValue(id, out action.target);
-                    }
-                    break;
             }
         }
-        if (receiver)
-        {
-            receiver.OnAction(action);
-        }
-    }
-
-    public static unsafe void OnActionHandler(int num, wi.wiKeyValue* kvps)
-    {
-        instance.OnAction(num, kvps);
+        if (receiver) { receiver.OnAction(dic); }
+        if (onAction!=null) { onAction(dic); }
     }
 }
 
@@ -120,7 +101,7 @@ public class wiServer : MonoBehaviour
     {
         Application.runInBackground = true;
         wi.wiStartServer();
-        wi.wiSetActionCallback(wiSystem.OnActionHandler);
+        wi.wiSetActionCallback((num, kvps) => wiSystem.GetInstance().OnAction(num, kvps));
     }
     
     unsafe void Update ()

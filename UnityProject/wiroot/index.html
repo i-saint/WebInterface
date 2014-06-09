@@ -7,10 +7,10 @@
 attribute vec3 ia_position;
 uniform mat4 u_proj;
 uniform mat4 u_trans;
-uniform vec3 u_size;
+uniform vec4 u_size;
 void main()
 {
-    gl_Position = u_proj * (u_trans* vec4(ia_position*u_size, 1.0));
+    gl_Position = u_proj * (u_trans* vec4(ia_position*u_size.xyz, 1.0));
 }
 </script>
 <script type="x-shader/x-fragment" id="ps_entities">
@@ -74,6 +74,14 @@ var Button = {
     Middle  : 1,
     Right   : 2,
 };
+var ProjType = {
+    Orthographic : 0,
+    Perspective  : 1,
+};
+var CoordinateType = {
+    XZ : 0,
+    XY : 1,
+};
 var FieldX = 10.0;
 var FieldY = 10.0;
 var InvalidHandle = -1;
@@ -91,23 +99,27 @@ var starttime = new Date().getTime();
 var mouse = {
     screen:     vec2.create(),
     screen_prev:vec2.create(),
-    pos:        vec2.create(),
-    pos_prev:   vec2.create(),
+    pos:        vec4.create(),
+    projpos:    vec4.create(),
     drag_begin: vec2.create(),
     dragging:   false,
     button:     0,
 };
 
 var camera = {
-    pos:    vec3.fromValues(0.0, 3.0, 0.0),
+    projType: ProjType.Orthographic,
+    coordType: CoordinateType.XZ,
+
+    pos:    vec3.fromValues(0.0, 25.0, -0.1),
     target: vec3.fromValues(0.0, 0.0, 0.0),
     up:     vec3.fromValues(0.0, 0.0, 1.0),
-    aspect: 1.0,
-    left:   -FieldX,
+    left: -FieldX,
     right:   FieldX,
     bottom: -FieldX,
     top:     FieldX,
-    znear:  0.1,
+    aspect: 1.0,
+    fovy: 45.0,
+    znear: 0.1,
     zfar:   1000.0,
 
     view: mat4.create(),
@@ -115,14 +127,43 @@ var camera = {
     viewProj: mat4.create(),
 
     updateMatrix: function() {
-        mat4.lookAt(this.view, this.pos, this.target, this.up);
-        mat4.ortho(this.proj, this.right, this.left, this.bottom, this.top, this.znear, this.zfar);
+        mat4.lookAtLH(this.view, this.pos, this.target, this.up);
+        if (this.projType == ProjType.Orthographic) {
+            mat4.orthoLH(this.proj, this.left, this.right, this.bottom, this.top, this.znear, this.zfar);
+        }
+        else if (this.projType == ProjType.Perspective) {
+            mat4.perspectiveLH(this.proj, this.fovy, this.aspect, this.znear, this.zfar);
+        }
         mat4.mul(this.viewProj, this.proj, this.view);
+    },
+
+    unProject: function (out, screenpos) {
+        var canvas = $(c);
+        var spos4 = vec4.fromValues(
+            (screenpos[0] / canvas.width) * 2.0 - 1.0,
+            -((screenpos[1] / canvas.height) * 2.0 - 1.0),
+            0.0, 1.0 );
+
+        var inv = mat4.create();
+        mat4.invert(inv, this.viewProj);
+        vec4.transformMat4(out, spos4, inv);
+        out[0] /= out[3];
+        out[1] /= out[3];
+        out[2] /= out[3];
     }
 };
 
 var editor = {
     entitySelection: [],
+
+    
+    project : function(result, ray_pos, ray_dir, plane)
+    {
+        var t = -(vec3.dot(ray_pos, plane) + plane[3]) / (vec3.dot(ray_dir, plane));
+        vec3.mul(result, ray_dir, vec3.fromValues(t,t,t));
+        vec3.add(result, result, ray_pos);
+    },
+
 
     onMouseMove: function() {
         if(mouse.dragging && editor.entitySelection.length>0) {
@@ -132,12 +173,12 @@ var editor = {
     onMouseDown: function() {
         if(mouse.button==Button.Left) {
             editor.clearEntitySelection();
-            var selection = editor.selectEntity(mouse.pos);
+            var selection = editor.selectEntity(mouse.projpos);
             if(selection!=InvalidHandle) {
                 editor.addEntitySelection(selection);
                 postCommand("/event/select",
                     {
-                        entity: h
+                        entity: selection
                     });
             }
         }
@@ -147,13 +188,14 @@ var editor = {
         if(mouse.button==Button.Left) {
         }
         else if(mouse.button==Button.Right) {
-            var hit = editor.selectEntity(mouse.pos);
+            var hit = editor.selectEntity(mouse.projpos);
             editor.entitySelection.each(function(h){
                 postCommand("/event/action",
                     {
                         entity: h,
-                        mouseX: mouse.pos[0],
-                        mouseY: mouse.pos[1],
+                        mouseX: mouse.projpos[0],
+                        mouseY: mouse.projpos[1],
+                        mouseZ: mouse.projpos[2],
                         target: hit
                     });
             });
@@ -175,15 +217,20 @@ var editor = {
     {
         var nearest = 0.0;
         var handle = InvalidHandle;
-        var diff = vec2.create();
+        var diff = vec3.create();
         for(var i=0; i<entities.ids.length; ++i) {
             var ipp = i+1;
             var pos = entities.trans.subarray(16*i+12, 16*ipp);
-            pos[1] = pos[2];
-            var size = entities.size.subarray(3*i, 3*ipp);
-            vec2.sub(diff, p, pos);
-            var radius = vec2.length(size);
-            var len = vec2.length(diff);
+            var size = entities.size.subarray(4*i, 4*ipp);
+            vec3.sub(diff, p, pos);
+            if (camera.coordType == CoordinateType.XZ) {
+                diff[1] = 0.0;
+            }
+            else if (camera.coordType == CoordinateType.XY) {
+                diff[2] = 0.0;
+            }
+            var radius = vec3.length(size);
+            var len = vec3.length(diff);
             if(len<radius) {
                 if(handle==InvalidHandle || len<nearest) {
                     nearest = len;
@@ -199,7 +246,7 @@ var editor = {
         for(var i=0; i<entities.ids.length; ++i) {
             var ipp = i+1;
             var pos = entities.trans.subarray(16*i+12, 16*ipp);
-            var size = entities.size.subarray(3*i, 3*ipp);
+            var size = entities.size.subarray(4*i, 4*ipp);
             var radius = vec2.length(size);
             if( (pos[0]-radius>=bl[0] && pos[0]+radius<=ur[0]) &&
                 (pos[1]-radius>=bl[1] && pos[1]+radius<=ur[1]) )
@@ -307,12 +354,30 @@ function onLoad()
     document.onmousemove = function(e) {
         vec2.copy(mouse.screen_prev, mouse.screen);
         vec2.set(mouse.screen, e.pageX, e.pageY);
-        var p_x = e.pageX / c.width;
-        var p_y = 1.0 - (e.pageY / c.height);
-        var gl_x = FieldX * (p_x-0.5)*2.0;
-        var gl_y = FieldY * (p_y-0.5)*2.0;
-        vec2.copy(mouse.pos_prev, mouse.pos);
-        vec2.set(mouse.pos, gl_x, gl_y);
+
+        camera.unProject(mouse.pos, mouse.screen);
+
+        var plane;
+        if (camera.coordType == CoordinateType.XZ) {
+            plane = vec4.fromValues(0.0, 1.0, 0.0, 0.0);
+        }
+        else if (camera.coordType == CoordinateType.XY) {
+            plane = vec4.fromValues(0.0, 0.0, 1.0, 0.0);
+        }
+
+        if (camera.projType == ProjType.Orthographic) {
+            var ray_dir = vec3.clone(camera.target);
+            vec3.sub(ray_dir, ray_dir, camera.pos);
+            vec3.normalize(ray_dir, ray_dir);
+            editor.project(mouse.projpos, mouse.pos, ray_dir, plane);
+        }
+        else if (camera.projType == ProjType.Perspective) {
+            var ray_dir = vec3.clone(mouse.pos);
+            vec3.sub(ray_dir, ray_dir, camera.pos);
+            vec3.normalize(ray_dir, ray_dir);
+            editor.project(mouse.projpos, camera.pos, ray_dir, plane);
+        }
+
         editor.onMouseMove();
     };
 
@@ -377,8 +442,12 @@ function postCommand(url, values)
 <body onload="onLoad()">
 <canvas id="c" width="1024" height="1024"></canvas><span id="fps">00</span>
 <div id="toolwindow">
-<input type="radio" name="projection" value="XZ" checked>XZ
-<input type="radio" name="projection" value="XY">XY<br>
+<!--
+<input type="radio" name="coordinate" value="0" checked>XZ
+<input type="radio" name="coordinate" value="1">XY<br>
+-->
+<input type="radio" name="camera" value="0" checked onclick="camera.projType = ProjType.Orthographic" />ortho
+<input type="radio" name="camera" value="1" onclick="camera.projType = ProjType.Perspective" />persp<br />
 
 <a href="https://github.com/i-saint/WebInterface">about WebInterface</a>
 </div>

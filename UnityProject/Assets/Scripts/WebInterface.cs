@@ -88,6 +88,11 @@ public class wi
                             break;
                         case "mouseY":
                             {
+                                ret.mouse.y = Convert.ToSingle(value);
+                            }
+                            break;
+                        case "mouseZ":
+                            {
                                 ret.mouse.z = Convert.ToSingle(value);
                             }
                             break;

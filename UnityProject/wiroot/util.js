@@ -17,17 +17,6 @@ function resizeChildren(e, num, creater) {
 }
 
 
-function bool_s(v)  { return "bool("+v.toString()+")"; }
-function int32_s(v)   { return "int32("+v.toString()+")"; }
-function uint32_s(v)  { return "uint32("+v.toString()+")"; }
-function float32_s(v) { return "float32("+v.toString()+")"; }
-function vec2_s(v)  { return "vec2("+v[0].toString()+","+v[1].toString()+")"; }
-function vec3_s(v)  { return "vec3("+v[0].toString()+","+v[1].toString()+","+v[2].toString()+")"; }
-function vec4_s(v)  { return "vec4("+v[0].toString()+","+v[1].toString()+","+v[2].toString()+","+v[3].toString()+")"; }
-function string_s(v){ return "string(\""+v+"\")"; }
-function instruction_s(p,e) { return "instruction("+p[0].toString()+","+p[1].toString()+",0.0,"+e.toString()+")"; }
-function curvepoint_s(p) { return "curvepoint("+p[0].toFixed(2)+","+p[1].toFixed(2)+","+p[2].toFixed(2)+","+p[3].toFixed(2)+","+p[4].toString()+")"; }
-
 function createShader(id)
 {
     var shaderScript = document.getElementById(id);
@@ -70,4 +59,3 @@ function createShaderProgram(vsid, psid)
     gl.linkProgram(program);
     return program;
 }
-

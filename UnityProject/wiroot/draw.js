@@ -117,7 +117,7 @@ function drawGL() {
     for (var i = 0; i < entities.ids.length; ++i) {
         var ipp = i + 1;
         gl.uniformMatrix4fv(sh_entities.u_trans, gl.FALSE, entities.trans.subarray(16 * i, 16 * ipp));
-        gl.uniform3fv(sh_entities.u_size, entities.size.subarray(3 * i, 3 * ipp));
+        gl.uniform4fv(sh_entities.u_size, entities.size.subarray(4 * i, 4 * ipp));
         if (editor.entitySelection.include(entities.ids[i])) {
             gl.uniform4fv(sh_entities.u_color, [1, 1, 1, 0.3]);
         }

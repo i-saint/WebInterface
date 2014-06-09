@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>nuclei: atomic level editor</title>
+<title>WebInterface for Unity</title>
 
 <script type="x-shader/x-vertex" id="vs_entities"> 
 attribute vec3 ia_position;
@@ -63,44 +63,19 @@ void main()
 }
 </script>
 
-<script type="x-shader/x-vertex" id="vs_lasers"> 
-attribute vec3 ia_position;
-uniform mat4 u_proj;
-uniform vec4 u_color;
-varying vec4 vs_color;
-void main()
-{
-    vs_color = vec4(u_color.rgb, u_color.a*ia_position.z);
-    gl_Position = u_proj * vec4(ia_position.xy, 0.0, 1.0);
-}
-</script>
-<script type="x-shader/x-fragment" id="ps_lasers">
-precision mediump float;
-varying vec4 vs_color;
-void main()
-{
-    gl_FragColor = vs_color;
-}
-</script>
-
 <script type="text/javascript" src="prototype.js"></script>
 <script type="text/javascript" src="gl-matrix-min.js"></script>
 <script type="text/javascript" src="draw.js"></script>
 <script type="text/javascript" src="util.js"></script>
 <script type="text/javascript">
 
-var EditMode = {
-    Entity : 0,
-    Curve : 1,
-    PickEntity : 2,
-};
 var Button = {
     Left    : 0,
     Middle  : 1,
     Right   : 2,
 };
-var FieldX = 10.12;
-var FieldY = 10.12;
+var FieldX = 10.0;
+var FieldY = 10.0;
 var InvalidHandle = -1;
 
 var gl;
@@ -160,6 +135,10 @@ var editor = {
             var selection = editor.selectEntity(mouse.pos);
             if(selection!=InvalidHandle) {
                 editor.addEntitySelection(selection);
+                postCommand("/event/select",
+                    {
+                        entity: h
+                    });
             }
         }
     },
@@ -170,7 +149,7 @@ var editor = {
         else if(mouse.button==Button.Right) {
             var hit = editor.selectEntity(mouse.pos);
             editor.entitySelection.each(function(h){
-                postCommand("/action",
+                postCommand("/event/action",
                     {
                         entity: h,
                         mouseX: mouse.pos[0],
@@ -243,7 +222,7 @@ var entities = {
 var ui = {
     onLoad: function()
     {
-        var ajax = new Ajax.Request("/const", {
+        var ajax = new Ajax.Request("/query/const", {
             method: "get",
             onComplete: function(res) {
                 var consts = res.responseText.evalJSON();
@@ -267,7 +246,7 @@ function updateEntities()
     loading = true;
 
     var ajax = new XMLHttpRequest();
-    ajax.open("GET", "/state", true);
+    ajax.open("GET", "/query/state", true);
     ajax.responseType = "arraybuffer";
     ajax.onload = function (ev) {
         loading = false;
@@ -398,6 +377,9 @@ function postCommand(url, values)
 <body onload="onLoad()">
 <canvas id="c" width="1024" height="1024"></canvas><span id="fps">00</span>
 <div id="toolwindow">
+<input type="radio" name="projection" value="XZ" checked>XZ
+<input type="radio" name="projection" value="XY">XY<br>
+
 <a href="https://github.com/i-saint/WebInterface">about WebInterface</a>
 </div>
 

@@ -5,14 +5,20 @@ using System.Collections.Generic;
 
 public class wiComponent : MonoBehaviour {
 
-    public delegate void Callback(Dictionary<String, String> kvp);
-    public Callback onAction;
+    public delegate void Handler(wi.wiEventType type, Dictionary<String, String> kvp);
+    public Handler eventHandler;
     public Vector4 color = Vector4.one*0.5f;
     int id;
+    int typeID;
+
+    public int GetWebInterfaceID() { return id; }
+    public int GetWebInterfaceTypeID() { return typeID; }
+
 
     void Start ()
     {
         id = wiSystem.GetInstance().AddObject(this);
+        typeID = wiSystem.GetInstance().GetTypeID(this);
     }
 
     void OnDestroy()
@@ -20,8 +26,8 @@ public class wiComponent : MonoBehaviour {
         wiSystem.GetInstance().DeleteObject(id);
     }
 
-    public virtual void OnAction(Dictionary<String, String> kvp)
+    public void OnWebEvent(wi.wiEventType type, Dictionary<String, String> kvp)
     {
-        if (onAction != null) { onAction(kvp); }
+        if (eventHandler != null) { eventHandler(type, kvp); }
     }
 }

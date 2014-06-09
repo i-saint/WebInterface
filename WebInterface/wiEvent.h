@@ -12,7 +12,7 @@ struct wiKeyValue
     const char *value;
 };
 typedef std::vector<wiKeyValue> wiKeyValueCont;
-typedef void(__stdcall *wiCallback)(int num_pairs, const wiKeyValue *pairs);
+typedef void(__stdcall *wiEventHandler)(int event_type, int num_pairs, const wiKeyValue *pairs);
 
 struct wiEntityDataStream
 {
@@ -35,7 +35,7 @@ enum wiEventTypeID
     wiET_Connect,
     wiET_Disconnect,
     wiET_Select,
-    wiET_Disselect,
+    wiET_Diselect,
     wiET_Action,
 };
 

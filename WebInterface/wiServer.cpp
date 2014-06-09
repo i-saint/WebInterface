@@ -74,12 +74,7 @@ wiServer::wiServer()
     , m_end_flag(false)
 
     , m_entities_timestamp(0)
-
-    , m_onconnect(nullptr)
-    , m_ondisconnect(nullptr)
-    , m_onselect(nullptr)
-    , m_ondisselect(nullptr)
-    , m_onaction(nullptr)
+    , m_event_handler(nullptr)
 {
     m_events.reserve(32);
     m_entities.reserve(128);
@@ -148,18 +143,9 @@ void wiServer::handleEvents()
 
     for(size_t ei=0; ei<m_events_tmp.size(); ++ei) {
         wiEvent *e = m_events_tmp[ei].get();
-        int num_pairs = e->getPairs().size();
-        wiKeyValue *kvp = num_pairs == 0 ? nullptr : &e->getPairs()[0];
-
-#define Handle(Type, Handler) case Type: if (Handler) { Handler(num_pairs, kvp); } break
-        switch (e->getTypeID()) {
-            Handle(wiET_Connect,    m_onconnect);
-            Handle(wiET_Disconnect, m_ondisconnect);
-            Handle(wiET_Select,     m_onselect);
-            Handle(wiET_Disselect,  m_ondisselect);
-            Handle(wiET_Action,     m_onaction);
-        }
-#undef Handle
+        int num_KVPs = e->getPairs().size();
+        wiKeyValue *KVPs = num_KVPs == 0 ? nullptr : &e->getPairs()[0];
+        if (m_event_handler) { m_event_handler(e->getTypeID(), num_KVPs, KVPs); };
     }
     m_events_tmp.clear();
 }
@@ -248,29 +234,9 @@ wiExport void wiSetViewProjectionMatrix(mat4 view, mat4 proj)
     wiServer::getInstance()->m_mvp = view * proj;
 }
 
-wiExport void wiSetConnectCallback(wiCallback cb)
+wiExport void wiSetEventHandler(wiEventHandler cb)
 {
-    wiServer::getInstance()->m_onconnect = cb;
-}
-
-wiExport void wiSetDisconnectCallback(wiCallback cb)
-{
-    wiServer::getInstance()->m_ondisconnect = cb;
-}
-
-wiExport void wiSetSelectCallback(wiCallback cb)
-{
-    wiServer::getInstance()->m_onselect = cb;
-}
-
-wiExport void wiSetDisselectCallback(wiCallback cb)
-{
-    wiServer::getInstance()->m_ondisselect = cb;
-}
-
-wiExport void wiSetActionCallback(wiCallback cb)
-{
-    wiServer::getInstance()->m_onaction = cb;
+    wiServer::getInstance()->m_event_handler = cb;
 }
 
 wiExport void wiSetEntityData(int32 num, wiEntityData *data)

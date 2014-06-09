@@ -51,15 +51,6 @@ inline void wiBuildKeyValuePairs(std::string &data, wiKeyValueCont &pairs)
     });
 }
 
-inline void wiBuildEventData(HTTPServerRequest &request, wiEventPtr evt)
-{
-    std::string &data = evt->getData();
-    wiGetDecodedRequestBody(request, data);
-    if (!data.empty()) {
-        wiBuildKeyValuePairs(data, evt->getPairs());
-    }
-}
-
 
 inline void wiMiliSleep(uint32 millisec)
 {

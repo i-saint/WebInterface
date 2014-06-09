@@ -7,32 +7,39 @@ using System.Runtime.InteropServices;
 
 public class wi
 {
+    public enum wiEventType
+    {
+        Unknown,
+        Connect,
+        Disconnect,
+        Select,
+        Diselect,
+        Action,
+    };
+
     public struct wiEntityData
     {
         public Matrix4x4 transform;
         public Vector4 size;
         public Vector4 color;
         public int id;
-        public int pad1, pad2, pad3;
+        public int typeID;
+        int pad0, pad1;
     }
 
     public unsafe struct wiKeyValue
     {
-        public char* name;
+        public char* key;
         public char* value;
     }
-    public unsafe delegate void wiCallback(int num, wiKeyValue* kvp);
+    public unsafe delegate void wiEventHandler(int eventType, int numKVP, wiKeyValue* KVPs);
 
     [DllImport ("WebInterface")] public static extern void wiStartServer();
     [DllImport ("WebInterface")] public static extern void wiStopServer();
     [DllImport ("WebInterface")] public static extern void wiUpdate();
 
     [DllImport ("WebInterface")] public static extern void wiSetViewProjectionMatrix(Matrix4x4 view, Matrix4x4 proj);
-    [DllImport ("WebInterface")] public static extern void wiSetConnectCallback(wiCallback cb);
-    [DllImport ("WebInterface")] public static extern void wiSetDisconnectCallback(wiCallback cb);
-    [DllImport ("WebInterface")] public static extern void wiSetSelectCallback(wiCallback cb);
-    [DllImport ("WebInterface")] public static extern void wiSetDisselectCallback(wiCallback cb);
-    [DllImport ("WebInterface")] public static extern void wiSetActionCallback(wiCallback cb);
+    [DllImport ("WebInterface")] public static extern void wiSetEventHandler(wiEventHandler cb);
 
     [DllImport ("WebInterface")] unsafe public static extern void wiSetEntityData(int num, wiEntityData *data);
     [DllImport ("WebInterface")] public static extern void wiClearEntityData();
@@ -41,6 +48,21 @@ public class wi
 
 
     // utilities
+
+    public static wiComponent GetTargetEntity(Dictionary<String, String> dic)
+    {
+        wiComponent ret = null;
+        try
+        {
+            String str;
+            if (dic.TryGetValue("target", out str))
+            {
+                wiSystem.GetInstance().entities.TryGetValue(Convert.ToInt32(str), out ret);
+            }
+        }
+        catch(Exception) {}
+        return ret;
+    }
 
     public struct wiActionData
     {

@@ -26,7 +26,8 @@ struct wiEntityData
     vec4 size;
     vec4 color;
     int32 id;
-    int32 pad[3];
+    int32 type_id;
+    int32 pad[2];
 };
 typedef std::vector<wiEntityData> wiEntityDataCont;
 
@@ -87,11 +88,7 @@ public:
     wiEntityDataCont m_entities;
     wiEntityDataStream m_entities_stream;
 
-    wiCallback m_onconnect;
-    wiCallback m_ondisconnect;
-    wiCallback m_onselect;
-    wiCallback m_ondisselect;
-    wiCallback m_onaction;
+    wiEventHandler m_event_handler;
 };
 
 #define wiExport extern "C" __declspec(dllexport)
@@ -101,11 +98,7 @@ wiExport void wiStopServer();
 wiExport void wiUpdate();
 
 wiExport void wiSetViewProjectionMatrix(mat4 view, mat4 proj);
-wiExport void wiSetConnectCallback(wiCallback cb);
-wiExport void wiSetDisconnectCallback(wiCallback cb);
-wiExport void wiSetSelectCallback(wiCallback cb);
-wiExport void wiSetDisselectCallback(wiCallback cb);
-wiExport void wiSetActionCallback(wiCallback cb);
+wiExport void wiSetEventHandler(wiEventHandler cb);
 
 wiExport void wiSetEntityData(int32 num, wiEntityData *data);
 wiExport void wiClearEntityData();
